@@ -1,0 +1,54 @@
+
+graph Main [[ main ]]
+{
+    input test.in;
+    output event std::midi::Message midiOut;
+    output event int out;
+    output test.levels;
+
+    node test = Test;
+
+    connection
+        test.eventOut -> std::midi::NoteToMIDI -> midiOut;
+}
+
+processor Test
+{
+    input stream float in;
+    output event (std::notes::NoteOn, std::notes::NoteOff) eventOut;
+    output event float[length] levels;
+
+    let length = 200;
+
+    void main()
+    {
+        eventOut <- std::notes::NoteOff (0, 96.0f, 1.0f);
+
+        eventOut <- std::notes::NoteOn (0, 96.0f, 1.0f);
+
+        // Wait till start of audio
+        while (abs(in) < 0.001)
+            advance();
+
+        float[length] perMsLevels;
+
+        for (wrap<length> i)
+        {
+            float peak = 0.0f;
+
+            loop (int (processor.frequency / 1000))
+            {
+                peak = max (peak, abs (in));
+                advance();
+            }
+
+            perMsLevels[i] = peak;
+        }
+
+        console <- perMsLevels;
+
+        eventOut <- std::notes::NoteOff (0, 96.0f, 1.0f);
+    }
+}
+
+

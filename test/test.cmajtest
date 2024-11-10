@@ -1,0 +1,18 @@
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:2000, subDir:"results/fm", patch: "../patches/FM/FM.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:500, subDir:"results/fm2", patch: "../patches/FM2/FM.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:2000, subDir:"results/pm", patch: "../patches/PM/PM.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:500, subDir:"results/pm2", patch: "../patches/PM2/PM.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:40000, subDir:"results/ym3012", patch: "../patches/YM3012/PM.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:10000, subDir:"waveshapes", patch: "../patches/Oscillator/Oscillator.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:10000, subDir:"waveshapesDCblocker", patch: "../patches/OscillatorDCblocker/Oscillator.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:32000, subDir:"testLately", patch: "../patches/TX81Z/TX81Z.cmajorpatch", skipMissingInputs: true })
+
+## runScript ({ frequency:44100, blockSize:64, samplesToRender:32000, subDir:"testFeedback7", patch: "../patches/TX81Z/TX81Z.cmajorpatch", skipMissingInputs: true })

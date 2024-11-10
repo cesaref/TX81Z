@@ -1,0 +1,220 @@
+
+
+graph Instrument  [[ main ]]
+{
+    input event int osc1WaveshapeIn         [[ name: "Osc 1 Waveshape", min: 1, max: 8, step: 1, init: 1 ]];
+    input event float osc1LevelIn           [[ name: "Osc 1 Level", min: 0, max: 99, step: 1, init: 99 ]];
+    input event float osc1FixedIn           [[ name: "Osc 1 Fixed Freq", min: 0, max: 1000, init: 0 ]];
+    input event float osc1FreqMultiplierIn  [[ name: "Osc 1 Freq Multiplier", min: 0, max: 16, init: 1 ]];
+    input event int osc1FeedbackIn          [[ name: "Osc 1 Feedback", min: 0, max: 7, step: 1, init: 0 ]];
+
+    input event int osc2WaveshapeIn         [[ name: "Osc 2 Waveshape", min: 1, max: 8, step: 1, init: 1 ]];
+    input event float osc2LevelIn           [[ name: "Osc 2 Level", min: 0, max: 99, step: 1, init: 0 ]];
+    input event float osc2FixedIn           [[ name: "Osc 2 Fixed Freq", min: 0, max: 1000, init: 0 ]];
+    input event float osc2FreqMultiplierIn  [[ name: "Osc 2 Freq Multiplier", min: 0, max: 16, init: 0.5 ]];
+    input event int osc2FeedbackIn          [[ name: "Osc 2 Feedback", min: 0, max: 7, step: 1, init: 0 ]];
+
+    input event std::midi::Message midiIn   [[ name: "MIDI input" ]];
+
+    output stream float out;
+
+    let voiceCount = 8;
+
+    node
+    {
+        voices         = Voice[voiceCount];
+        voiceAllocator = std::voices::VoiceAllocator (voiceCount);
+    }
+
+    connection
+    {
+        osc1WaveshapeIn -> voices.waveshapeIn[0];
+        osc2WaveshapeIn -> voices.waveshapeIn[1];
+
+        osc1LevelIn -> voices.levelIn[0];
+        osc2LevelIn -> voices.levelIn[1];
+
+        osc1FixedIn -> voices.fixedIn[0];
+        osc2FixedIn -> voices.fixedIn[1];
+
+        osc1FreqMultiplierIn -> voices.freqMultiplierIn[0];
+        osc2FreqMultiplierIn -> voices.freqMultiplierIn[1];
+
+        osc1FeedbackIn -> voices.feedbackIn[0];
+        osc2FeedbackIn -> voices.feedbackIn[1];
+
+        midiIn -> std::midi::MPEConverter -> voiceAllocator -> voices.eventIn;
+        voices.out -> out;
+    }
+}
+
+graph Voice
+{
+    input event (std::notes::NoteOn,
+                 std::notes::NoteOff) eventIn;
+
+    input osc.waveshapeIn;
+    input osc.levelIn;
+    input osc.fixedIn;
+    input osc.freqMultiplierIn;
+    input osc.feedbackIn;
+
+    output stream float out;
+
+    node
+    {
+        osc = TX81Z::Oscillator[2];
+        envelope = std::envelopes::FixedASR (0.01f, 0.1f);
+    }
+
+    connection
+    {
+        eventIn -> osc.eventIn, envelope.eventIn;
+
+        // Configure Osc2 modulating Osc1
+        osc[1].out -> [1] -> osc[0].modulatorIn;
+        osc[0].out -> out;
+        envelope.gainOut -> osc.amplitudeIn;
+    }
+}
+
+
+namespace TX81Z
+{
+    // Tuning for how much operator modulation occurs
+    let operatorFactor = 4.0f;
+
+    float feedbackAmount (int level)
+    {
+        const float[] feedbackValues = (0.0f, 0.008f, 0.015f, 0.024f, 0.07f, 0.12f, 0.19f, 0.26f);
+
+        return feedbackValues.at (level);
+    }
+
+    float levelToGain (float level)
+    {
+        return std::levels::dBtoGain ((0.723f * level) - 72.9f);
+    }
+
+    float sinOfPhase  (float phase)  { return sin (phase * float(twoPi)); }
+    float sinOf2Phase (float phase)  { return sin (phase * float(twoPi * 2)); }
+
+    // 8 waveshapes defined within the instrument, all variations on the sin function
+    float getWaveshape (int waveshape, float phase)
+    {
+        phase = fmod (phase, 1.0f);
+
+        if (waveshape == 1)         return sinOfPhase (phase);
+
+        if (waveshape == 2)
+        {
+            if (phase < 0.25f)      return sinOfPhase (phase - 0.25f) + 1.0f;
+            if (phase < 0.5f)       return sinOfPhase (phase + 0.25f) + 1.0f;
+            if (phase < 0.75f)      return sinOfPhase (phase - 0.25f) - 1.0f;
+                                    return sinOfPhase (phase + 0.25f) - 1.0f;
+        }
+
+        if (waveshape == 3)         return phase < 0.5 ? sinOfPhase (phase) : 0.0f;
+
+        if (waveshape == 4)
+        {
+            if (phase < 0.25f)      return sinOfPhase (phase - 0.25f) + 1.0f;
+            if (phase < 0.5f)       return sinOfPhase (phase + 0.25f) + 1.0f;
+                                    return 0.0f;
+        }
+
+        if (waveshape == 5)         return phase < 0.5 ? sinOfPhase (2.0f * phase) : 0.0f;
+
+        if (waveshape == 6)
+        {
+            if (phase < 0.125f)     return sinOf2Phase (phase - 0.125f) + 1.0f;
+            if (phase < 0.25f)      return sinOf2Phase (phase + 0.125f) + 1.0f;
+            if (phase < 0.375f)     return sinOf2Phase (phase - 0.125f) - 1.0f;
+            if (phase < 0.5f)       return sinOf2Phase (phase + 0.125f) - 1.0f;
+                                    return 0.0f;
+        }
+
+        if (waveshape == 7)
+        {
+            if (phase < 0.25f)      return  sinOf2Phase (phase);
+            if (phase < 0.5f)       return -sinOf2Phase (phase);
+                                    return 0.0f;
+        }
+
+        if (waveshape == 8)
+        {
+            if (phase < 0.125f)     return 1.0f + sinOf2Phase (phase - 0.125f);
+            if (phase < 0.25f)      return 1.0f + sinOf2Phase (phase + 0.125f);
+            if (phase < 0.375f)     return 1.0f - sinOf2Phase (phase - 0.125f);
+            if (phase < 0.5f)       return 1.0f - sinOf2Phase (phase + 0.125f);
+                                    return 0.0f;
+        }
+
+        return 0.0f;
+    }
+
+    processor Oscillator
+    {
+        input event (std::notes::NoteOn,
+                     std::notes::NoteOff) eventIn;
+
+        input event int waveshapeIn;
+        input event float levelIn;
+        input event float fixedIn;
+        input event float freqMultiplierIn;
+        input event int feedbackIn;
+        input stream float amplitudeIn, modulatorIn;
+
+        output stream float out;
+
+        event eventIn (std::notes::NoteOn e)
+        {
+            notePitch = e.pitch;
+            calculatePhaseIncrement();
+
+            if (! noteActive)
+                phase = 0.0f;
+
+            noteActive = true;
+        }
+
+        event eventIn (std::notes::NoteOff e)
+        {
+            noteActive = false;
+        }
+
+        event waveshapeIn (int i)               { waveshape = i; }
+        event levelIn (float f)                 { gain = levelToGain (f); }
+        event fixedIn (float f)                 { fixedPitch = f; calculatePhaseIncrement(); }
+        event freqMultiplierIn (float f)        { multiplier = f; calculatePhaseIncrement(); }
+        event feedbackIn (int i)                { feedback = feedbackAmount (i); }
+
+        float notePitch, phase, phaseIncrement;
+        float gain, fixedPitch, multiplier, feedback;
+        int waveshape;
+
+        void calculatePhaseIncrement()
+        {
+            let noteFrequency = fixedPitch + multiplier * std::notes::noteToFrequency (notePitch);
+            phaseIncrement = noteFrequency / float (processor.frequency);
+        }
+
+        bool noteActive = false;
+
+        void main()
+        {
+            calculatePhaseIncrement();
+
+            float oscillatorValue;
+
+            loop
+            {
+                phase = fmod (phase + phaseIncrement, 1.0f);
+                oscillatorValue = amplitudeIn * getWaveshape (waveshape, phase + (operatorFactor * modulatorIn) + (oscillatorValue * feedback));
+                out <- gain * oscillatorValue;
+                advance();
+            }
+        }
+    }
+
+}

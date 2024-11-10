@@ -1,0 +1,133 @@
+graph TestFM [[ main ]]
+{
+    output stream float out;
+    output stream float pmOut;
+
+    node carrier = std::oscillators::Sine (float, 1000.0f);
+    node modulator = std::oscillators::Sine (float, 500.0f);
+    node pm = OscillatorPM (1000.0, 1.3f);
+    node dac = Ym3012DacEmulation;
+
+    connection
+    {
+        (0.5f * pm.out) -> pmOut;
+        modulator.out -> pm -> dac;
+        (0.5f * dac.out) -> out;
+    }
+}
+
+processor OscillatorPM (float freq, float modulationAmount)
+{
+    input stream float modulator;
+    output stream float out;
+
+    void main()
+    {
+        var phaseInc = float (twoPi * freq / processor.frequency);
+        float32 phase;
+
+        loop
+        {
+            out <- sin (phase + modulationAmount * modulator);
+            phase = (phase + phaseInc) % float (twoPi);
+            advance();
+        }
+    }
+}
+
+// The YM3012 has a 16 bit dynamic range, but 10 bit resolution
+graph Ym3012DacEmulation
+{
+    input stream float in;
+    output stream float out;
+
+    node quantiser = Quantiser;
+    node noise = std::noise::White;
+    node mainsHum1 = std::oscillators::Sine (float, 50.0f);
+    node mainsHum2 = std::oscillators::Sine (float, 100.0f);
+    node noiseFilter = filter::Processor (filter::Mode::lowPass, 12000.0f);
+
+    namespace filter = std::filters::tpt::onepole;
+
+    connection
+    {
+        in -> quantiser -> noiseFilter.in;
+        noise.out * 0.001f -> noiseFilter.in;
+        noiseFilter.out -> out;
+        mainsHum1.out * 0.00002f -> out;
+        mainsHum2.out * 0.00005f -> out;
+    }
+}
+
+processor Quantiser
+{
+    input stream float in;
+    output stream float out;
+
+    int clz (int x)
+    {
+        int[16] lookupTable =
+        (
+            32, 31, 30, 30, 29, 29, 29, 29, 28, 28, 28, 28, 28, 28, 28, 28
+        );
+
+        int n;
+
+        if (x >= (1 << 16)) {
+            if (x >= (1 << 24)) {
+                if (x >= (1 << 28)) {
+                    n = 28;
+                }
+                else {
+                    n = 24;
+                }
+            }
+            else {
+                if (x >= (1 << 20)) {
+                    n = 20;
+                }
+                else {
+                    n = 16;
+                }
+            }
+        }
+        else {
+            if (x >= (1 << 8)) {
+                if (x >= (1 << 12)) {
+                    n = 12;
+                }
+                else {
+                    n = 8;
+                }
+            }
+            else {
+                if (x >= (1 << 4)) {
+                    n = 4;
+                }
+                else {
+                    n = 0;
+                }
+            }
+        }
+
+        return lookupTable.at (x >> n) - n;
+    }
+
+    float quantise (float f)
+    {
+        let i = 32768 + int (f * 32767.0f);
+        let shift = min (clz (i) - 16, 7);
+        let shifted = i << shift;
+        let quantised = shifted & 0xffc0;
+        return float ((quantised >> shift) - 32768) * (1.0f / 32767.0f);
+    }
+
+    void main()
+    {
+        loop
+        {
+            out <- quantise (in);
+            advance();
+        }
+    }
+}

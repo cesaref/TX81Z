@@ -1,0 +1,36 @@
+graph TestFM [[ main ]]
+{
+    output stream float<3> out;
+
+    node carrier = std::oscillators::Sine (float, 1000.0f);
+    node modulator = std::oscillators::Sine (float, 50.0f);
+    node pm = OscillatorPM (1000.0, 15.0f);
+
+    connection
+    {
+        modulator.out -> pm;
+
+        float<3> (carrier.out, modulator.out, pm.out) -> out;
+    }
+}
+
+processor OscillatorPM (float freq, float modulationAmount)
+{
+    input stream float modulator;
+    output stream float out;
+
+    void main()
+    {
+        var phaseInc = float (twoPi * freq / processor.frequency);
+        float32 phase;
+
+        loop
+        {
+            out <- sin (phase + modulationAmount * modulator);
+            phase = (phase + phaseInc) % float (twoPi);
+            advance();
+        }
+    }
+}
+
+

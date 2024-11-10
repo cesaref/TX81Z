@@ -1,0 +1,62 @@
+
+graph Main [[ main ]]
+{
+    input test.in;
+    output event std::midi::Message midiOut;
+    output event int out;
+
+    node test = Test;
+
+    connection
+        test.eventOut -> std::midi::NoteToMIDI -> midiOut;
+}
+
+/// Calculate how note velocity affects voice amplitude
+processor Test
+{
+    input stream float in;
+    output event (std::notes::NoteOn, std::notes::NoteOff) eventOut;
+
+    float midiNote = 72.0f;
+
+    float calculatePeakForVelocity (int v)
+    {
+        eventOut <- std::notes::NoteOn (0, midiNote, float (v) / 127.0f);
+
+        float peak = 0.0f;
+
+        // Skip the first part to allow the voice to settle
+        loop (1000)
+            advance();
+
+        loop (int (processor.frequency / 32))
+        {
+            peak = max (peak, abs (in));
+            advance();
+        }
+
+        eventOut <- std::notes::NoteOff (0, midiNote, 0.0f);
+
+        loop (1000)
+            advance();
+
+        return std::levels::gainTodB (peak);
+    }
+
+    void main()
+    {
+        eventOut <- std::notes::NoteOff (0, midiNote, 0.0f);
+
+        loop
+        {
+            float[128] velocityScaling;
+
+            for (wrap<128> i)
+                velocityScaling[i] = calculatePeakForVelocity (i);
+
+            console <- velocityScaling;
+        }
+    }
+}
+
+
